@@ -1,0 +1,42 @@
+scope: postgres-ha
+namespace: /service
+
+bootstrap:
+  dcs:
+    ttl: 10
+    loop_wait: 2
+    retry_timeout: 2
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        wal_keep_size: 128MB
+        max_wal_senders: 5
+        max_replication_slots: 5
+        checkpoint_timeout: 30s
+
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+  pg_hba:
+    - host replication replicator 172.20.0.0/24 md5
+    - host all all 172.20.0.0/24 md5
+
+restapi:
+  listen: 0.0.0.0:8008
+
+postgresql:
+  data_dir: /var/lib/postgresql/data/pgdata
+  pgpass: /var/lib/postgresql/.pgpass
+  authentication:
+    replication:
+      username: replicator
+      password: replicator_pwd
+    superuser:
+      username: postgres
+      password: postgres_master_pwd
