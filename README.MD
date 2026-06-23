@@ -13,28 +13,40 @@ This project implements a strict **CP (Consistency / Partition Tolerance)** Post
 ## **Architecture & Topology**
 
 ```mermaid  
-graph TD  
-    Client["Client App / SRE Suite<br>(Port 5000)"] -->|TCP| HAProxy["HAProxy<br>(L4 Load Balancer)"]  
-      
-    subgraph Patroni Cluster
-        HAProxy -->|HTTP Check 200| PG1[("pg-node1<br/>Leader (R/W)")]  
-        HAProxy -.->|HTTP Check 503| PG2[("pg-node2<br/>Sync Replica")]  
-        HAProxy -.->|HTTP Check 503| PG3[("pg-node3<br/>Async Replica")]  
-          
-        PG1 ==>|WAL Streaming| PG2  
-        PG1 -.->|WAL Streaming| PG3  
+graph TD
+    %% Definição de Paleta de Cores (Otimizada para Dark UI / Alto Contraste)
+    classDef client fill:#334155,stroke:#0f172a,stroke-width:2px,color:#f8fafc,rx:8,ry:8
+    classDef haproxy fill:#2563eb,stroke:#1e3a8a,stroke-width:2px,color:#eff6ff,rx:8,ry:8
+    classDef leader fill:#16a34a,stroke:#14532d,stroke-width:3px,color:#f0fdf4,rx:10,ry:10
+    classDef sync fill:#d97706,stroke:#78350f,stroke-width:2px,color:#fffbeb,rx:10,ry:10
+    classDef async fill:#4b5563,stroke:#1f2937,stroke-width:2px,color:#f9fafb,rx:10,ry:10
+    classDef etcd fill:#dc2626,stroke:#7f1d1d,stroke-width:2px,color:#fef2f2,rx:8,ry:8
+
+    Client["🖥️ Client App / SRE Suite<br/>(Port 5000)"]:::client -- "TCP" --> HAProxy
+
+    subgraph Gateway ["Camada de Roteamento"]
+        HAProxy["HAProxy<br/>(L4 Load Balancer)"]:::haproxy
     end
 
-    subgraph Raft Consensus Store  
-        PG1 <-->|Heartbeats| ETCD["etcd Cluster<br/>(3-Node Quorum)"]  
-        PG2 <-->|Heartbeats| ETCD  
-        PG3 <-->|Heartbeats| ETCD  
+    subgraph Patroni ["Cluster PostgreSQL + Patroni"]
+        PG1[("pg-node1<br/>Leader (R/W)")]:::leader
+        PG2[("pg-node2<br/>Sync Replica")]:::sync
+        PG3[("pg-node3<br/>Async Replica")]:::async
     end
 
-    style PG1 fill:#1e7e34,stroke:#000,stroke-width:2px,color:#fff  
-    style PG2 fill:#6c757d,stroke:#000,color:#fff  
-    style PG3 fill:#6c757d,stroke:#000,color:#fff  
-    style HAProxy fill:#316192,stroke:#000,color:#fff
+    subgraph Consensus ["Consenso Distribuído"]
+        ETCD["etcd Cluster<br/>(3-Node Quorum)"]:::etcd
+    end
+
+    %% Roteamento do HAProxy
+    HAProxy == "HTTP 200 OK" ==> PG1
+    HAProxy -. "HTTP 503" .-> PG2
+    HAProxy -. "HTTP 503" .-> PG3
+
+    %% Comunicação com etcd
+    PG1 <-->|"Heartbeats / TTL"| ETCD
+    PG2 <-->|"Heartbeats / Watch"| ETCD
+    PG3 <-->|"Heartbeats / Watch"| ETCD
 ```
 
 ### **The Stack:**
